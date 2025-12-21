@@ -91,13 +91,6 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-### Run on Google Colab
-
-```bash
-!pip install -r requirements.txt
-!streamlit run app.py & npx localtunnel --port 8501
-```
-
 ---
 
 ## Use Case
