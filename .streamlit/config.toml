@@ -1,0 +1,46 @@
+[theme]
+primaryColor="#00ff87"
+backgroundColor="#0e1117"
+secondaryBackgroundColor="#262730"
+textColor="#fafafa"
+font="sans serif"
+```
+- Click **"Commit changes"**
+
+### **Step 4: Deploy on Streamlit Cloud**
+
+1. Go to [share.streamlit.io](https://share.streamlit.io)
+2. Click **"Sign in"** → Use your **GitHub account**
+3. Click **"New app"**
+4. Select:
+   - **Repository:** `your-username/pl-match-predictor`
+   - **Branch:** `main`
+   - **Main file path:** `app.py`
+5. Click **"Deploy!"**
+
+### **Step 5: Wait & Share! 🎉**
+- Takes 2-3 minutes to deploy
+- You'll get a URL like: `https://your-app.streamlit.app`
+- Share this URL with anyone!
+
+---
+
+## 🎥 **Quick Alternative: Use Streamlit's Template**
+
+If GitHub seems complicated, here's an easier way:
+
+1. Go to [streamlit.io/generative-ai](https://streamlit.io/generative-ai)
+2. Click **"Fork this app"**
+3. Replace their code with ours
+4. Auto-deployed!
+
+---
+
+## 📝 **Here's the Complete File Structure:**
+```
+pl-match-predictor/
+├── app.py                    # Main application
+├── requirements.txt          # Python packages
+├── .streamlit/
+│   └── config.toml          # Theme settings (optional)
+└── README.md                # Auto-created
