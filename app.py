@@ -60,7 +60,7 @@ def calc_record(w, d, l):
 
 #Main App
 
-st.title("⚽ Premier League Match Predictor")
+st.title("⚽ Football Match Predictor")
 st.markdown("---")
 
 # Team Names
