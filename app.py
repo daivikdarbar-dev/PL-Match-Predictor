@@ -3,7 +3,7 @@ import numpy as np
 
 #CONFIG
 
-st.set_page_config(page_title="PL Match Predictor", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="Football Match Predictor", page_icon="⚽", layout="wide")
 
 #Prediction Model
 
