@@ -1,8 +1,3 @@
-"""
-Premier League Match Predictor - REAL WEB SCRAPING
-This version scrapes ACTUAL live data from FBref and other sources
-"""
-
 import streamlit as st
 import numpy as np
 import requests
