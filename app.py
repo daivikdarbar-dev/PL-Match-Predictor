@@ -2,7 +2,6 @@ import streamlit as st
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
-import re
 
 # PAGE CONFIG
 st.set_page_config(
@@ -12,7 +11,7 @@ st.set_page_config(
 )
 
 st.title("⚽ Premier League Match Predictor")
-st.caption("Transparent, rule-based model using public FBref data")
+st.caption("Rule-based football model using public FBref data")
 
 # DATA SCRAPING
 @st.cache_data(ttl=3600)
@@ -20,7 +19,12 @@ def fetch_pl_table():
     url = "https://fbref.com/en/comps/9/Premier-League-Stats"
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    response = requests.get(url, headers=headers, timeout=15)
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+    except:
+        return None
+
     soup = BeautifulSoup(response.text, "html.parser")
 
     # FBref tables are hidden inside HTML comments
@@ -39,6 +43,9 @@ def fetch_pl_table():
 
     table_soup = BeautifulSoup(table_html, "html.parser")
     table = table_soup.find("table", class_="stats_table")
+
+    if table is None:
+        return None
 
     teams = {}
 
@@ -62,14 +69,50 @@ def fetch_pl_table():
 
     return teams
 
-# UI
 
+# PREDICTION LOGIC
+
+def predict_match(home, away):
+    score = 0
+
+    # League position (lower is better)
+    score += (away["position"] - home["position"]) * 2
+
+    # Attack vs defense
+    score += (home["gf"] - away["ga"]) * 1.5
+    score -= (away["gf"] - home["ga"]) * 1.5
+
+    def sigmoid(x):
+        return 1 / (1 + np.exp(-x / 5))
+
+    home_win = sigmoid(score) * 100
+    away_win = sigmoid(-score) * 100
+    draw = 100 - home_win - away_win
+
+    return {
+        "home": home_win,
+        "draw": max(draw, 0),
+        "away": away_win,
+        "confidence": "High" if abs(score) > 6 else "Medium"
+    }
+
+
+# UI
 teams_data = fetch_pl_table()
+
+if teams_data is None or len(teams_data) == 0:
+    st.error("Could not load Premier League data from FBref. Please refresh later.")
+    st.stop()
+
 teams = sorted(teams_data.keys())
 
 col1, col2 = st.columns(2)
 home_team = col1.selectbox("🏠 Home Team", teams)
 away_team = col2.selectbox("✈️ Away Team", teams, index=1)
+
+if home_team == away_team:
+    st.warning("Please select two different teams.")
+    st.stop()
 
 if st.button("🔮 Predict Match", type="primary", use_container_width=True):
     home = teams_data[home_team]
@@ -88,5 +131,4 @@ if st.button("🔮 Predict Match", type="primary", use_container_width=True):
     st.markdown(f"**Confidence:** {result['confidence']}")
 
     st.markdown("---")
-    st.caption("Model notes: rule-based weights, no betting odds, no hidden ML")
-
+    st.caption("Model notes: explainable rules, no betting odds, no black-box ML")
