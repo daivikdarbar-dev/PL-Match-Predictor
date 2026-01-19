@@ -1,108 +1,119 @@
 import streamlit as st
-import numpy as np
 import requests
-from bs4 import BeautifulSoup
+import numpy as np
 
-# PAGE CONFIG
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(
-    page_title="Premier League Match Predictor",
+    page_title="Football Match Predictor",
     page_icon="⚽",
     layout="wide"
 )
 
-st.title("⚽ Premier League Match Predictor")
-st.caption("Rule-based football model using public FBref data")
+st.title("⚽ Football Match Predictor")
+st.caption("Competition-aware, automated, rule-based model")
 
-# DATA SCRAPING
+# =========================
+# API CONFIG
+# =========================
+API_HOST = "api-football-v1.p.rapidapi.com"
+API_KEY = st.secrets["API_FOOTBALL_KEY"]
+
+HEADERS = {
+    "X-RapidAPI-Key": API_KEY,
+    "X-RapidAPI-Host": API_HOST
+}
+
+# =========================
+# COMPETITIONS
+# =========================
+LEAGUES = {
+    "Premier League": 39,
+    "La Liga": 140,
+    "Serie A": 135,
+    "Bundesliga": 78,
+    "Ligue 1": 61
+}
+
+SEASON = 2024
+
+# =========================
+# DATA FETCHING
+# =========================
 @st.cache_data(ttl=3600)
-def fetch_pl_table():
-    url = "https://fbref.com/en/comps/9/Premier-League-Stats"
-    headers = {"User-Agent": "Mozilla/5.0"}
+def fetch_standings(league_id):
+    url = f"https://{API_HOST}/v3/standings"
+    params = {"league": league_id, "season": SEASON}
 
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-    except:
-        return None
+    r = requests.get(url, headers=HEADERS, params=params)
+    data = r.json()
 
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    # FBref tables are hidden inside HTML comments
-    comments = soup.find_all(
-        string=lambda text: isinstance(text, str) and "stats_table" in text
-    )
-
-    table_html = None
-    for comment in comments:
-        if "Premier League" in comment:
-            table_html = comment
-            break
-
-    if table_html is None:
-        return None
-
-    table_soup = BeautifulSoup(table_html, "html.parser")
-    table = table_soup.find("table", class_="stats_table")
-
-    if table is None:
-        return None
-
+    standings = data["response"][0]["league"]["standings"][0]
     teams = {}
 
-    for row in table.find("tbody").find_all("tr"):
-        try:
-            team = row.find("th").text.strip()
-            cells = row.find_all("td")
+    for t in standings:
+        played = t["all"]["played"]
 
-            position = int(cells[0].text)
-            played = int(cells[2].text)
-            gf = int(cells[5].text)
-            ga = int(cells[6].text)
-
-            teams[team] = {
-                "position": position,
-                "gf": gf / max(played, 1),
-                "ga": ga / max(played, 1)
-            }
-        except:
-            continue
+        teams[t["team"]["name"]] = {
+            "position": t["rank"],
+            "points_per_game": t["points"] / max(played, 1),
+            "gf": t["all"]["goals"]["for"] / max(played, 1),
+            "ga": t["all"]["goals"]["against"] / max(played, 1),
+            "home_ppg": (
+                (t["home"]["wins"] * 3 + t["home"]["draws"])
+                / max(t["home"]["played"], 1)
+            ),
+            "away_ppg": (
+                (t["away"]["wins"] * 3 + t["away"]["draws"])
+                / max(t["away"]["played"], 1)
+            )
+        }
 
     return teams
 
 
-# PREDICTION LOGIC
-
+# =========================
+# MODEL
+# =========================
 def predict_match(home, away):
     score = 0
 
-    # League position (lower is better)
-    score += (away["position"] - home["position"]) * 2
+    # League position
+    score += (away["position"] - home["position"]) * 1.8
 
-    # Attack vs defense
+    # Attack vs defence
     score += (home["gf"] - away["ga"]) * 1.5
     score -= (away["gf"] - home["ga"]) * 1.5
+
+    # Home advantage
+    score += (home["home_ppg"] - away["away_ppg"]) * 2
+
+    # Overall consistency
+    score += (home["points_per_game"] - away["points_per_game"]) * 2
 
     def sigmoid(x):
         return 1 / (1 + np.exp(-x / 5))
 
     home_win = sigmoid(score) * 100
     away_win = sigmoid(-score) * 100
-    draw = 100 - home_win - away_win
+    draw = max(0, 100 - home_win - away_win)
 
     return {
         "home": home_win,
-        "draw": max(draw, 0),
+        "draw": draw,
         "away": away_win,
         "confidence": "High" if abs(score) > 6 else "Medium"
     }
 
 
+# =========================
 # UI
-teams_data = fetch_pl_table()
+# =========================
+league_name = st.selectbox("Select Competition", list(LEAGUES.keys()))
+league_id = LEAGUES[league_name]
 
-if teams_data is None or len(teams_data) == 0:
-    st.error("Could not load Premier League data from FBref. Please refresh later.")
-    st.stop()
+teams_data = fetch_standings(league_id)
 
 teams = sorted(teams_data.keys())
 
@@ -114,7 +125,7 @@ if home_team == away_team:
     st.warning("Please select two different teams.")
     st.stop()
 
-if st.button("🔮 Predict Match", type="primary", use_container_width=True):
+if st.button("🔮 Predict Match", use_container_width=True):
     home = teams_data[home_team]
     away = teams_data[away_team]
 
@@ -130,5 +141,10 @@ if st.button("🔮 Predict Match", type="primary", use_container_width=True):
 
     st.markdown(f"**Confidence:** {result['confidence']}")
 
-    st.markdown("---")
-    st.caption("Model notes: explainable rules, no betting odds, no black-box ML")
+    with st.expander("Why this result?"):
+        st.write(
+            "- League position\n"
+            "- Goals scored vs conceded\n"
+            "- Home vs away performance\n"
+            "- Points per game in this competition"
+        )
