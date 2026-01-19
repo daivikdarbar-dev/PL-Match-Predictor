@@ -15,85 +15,52 @@ st.title("⚽ Premier League Match Predictor")
 st.caption("Transparent, rule-based model using public FBref data")
 
 # DATA SCRAPING
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0"
-}
-
-@st.cache_data(ttl=1800)
+@st.cache_data(ttl=3600)
 def fetch_pl_table():
     url = "https://fbref.com/en/comps/9/Premier-League-Stats"
-    response = requests.get(url, headers=HEADERS, timeout=15)
-    soup = BeautifulSoup(response.content, "html.parser")
+    headers = {"User-Agent": "Mozilla/5.0"}
 
-    table = soup.find("table", class_="stats_table")
-    rows = table.tbody.find_all("tr")
+    response = requests.get(url, headers=headers, timeout=15)
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    data = {}
-
-    for row in rows:
-        team = row.find("th", {"data-stat": "team"}).text.strip()
-
-        def val(stat):
-            cell = row.find("td", {"data-stat": stat})
-            return int(cell.text.strip()) if cell and cell.text.strip() != "" else 0
-
-        data[team] = {
-            "position": val("rank"),
-            "played": val("games"),
-            "gf": val("goals_for"),
-            "ga": val("goals_against"),
-            "points": val("points"),
-            "form": parse_form(row)
-        }
-
-    return data
-
-def parse_form(row):
-    form_cell = row.find("td", {"data-stat": "last_5"})
-    if not form_cell:
-        return 50
-
-    form = form_cell.text.strip()
-    pts = form.count("W") * 3 + form.count("D")
-    return (pts / 15) * 100
-
-# MODEL
-
-def predict_match(home, away):
-    weights = {
-        "form": 0.30,
-        "position": 0.15,
-        "attack": 0.20,
-        "defense": 0.15,
-        "home_adv": 0.20
-    }
-
-    score = (
-        (home["form"] - away["form"]) * weights["form"] +
-        (away["position"] - home["position"]) * weights["position"] +
-        (home["gf"] - away["gf"]) * weights["attack"] +
-        (away["ga"] - home["ga"]) * weights["defense"] +
-        10 * weights["home_adv"]
+    # FBref tables are hidden inside HTML comments
+    comments = soup.find_all(
+        string=lambda text: isinstance(text, str) and "stats_table" in text
     )
 
-    home_win = 1 / (1 + np.exp(-score / 10))
-    away_win = 1 - home_win
+    table_html = None
+    for comment in comments:
+        if "Premier League" in comment:
+            table_html = comment
+            break
 
-    draw = max(0.18, 0.30 - abs(score) * 0.01)
+    if table_html is None:
+        return None
 
-    total = home_win + away_win + draw
+    table_soup = BeautifulSoup(table_html, "html.parser")
+    table = table_soup.find("table", class_="stats_table")
 
-    return {
-        "home": home_win / total * 100,
-        "draw": draw / total * 100,
-        "away": away_win / total * 100,
-        "confidence": (
-            "High" if abs(score) > 15 else
-            "Medium" if abs(score) > 7 else
-            "Low"
-        )
-    }
+    teams = {}
+
+    for row in table.find("tbody").find_all("tr"):
+        try:
+            team = row.find("th").text.strip()
+            cells = row.find_all("td")
+
+            position = int(cells[0].text)
+            played = int(cells[2].text)
+            gf = int(cells[5].text)
+            ga = int(cells[6].text)
+
+            teams[team] = {
+                "position": position,
+                "gf": gf / max(played, 1),
+                "ga": ga / max(played, 1)
+            }
+        except:
+            continue
+
+    return teams
 
 # UI
 
